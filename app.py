@@ -1,38 +1,32 @@
-from flask import Flask, render_template, request
-from gradio_client import Client, handle_file
+from fastapi import FastAPI, UploadFile, File
+from fastapi.responses import FileResponse
+from gradio_client import Client, file
+import shutil
+import uuid
 import os
 
-app = Flask(__name__)
-UPLOAD_FOLDER = "static/uploads"
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app = FastAPI()
+client = Client("frogleo/AI-Clothes-Changer")
 
-client = Client("selfit-camera/OutfitAnyway")
+@app.post("/tryon/")
+async def tryon(person: UploadFile = File(...), garment: UploadFile = File(...)):
+    # Save files locally
+    person_path = f"temp/{uuid.uuid4()}_{person.filename}"
+    garment_path = f"temp/{uuid.uuid4()}_{garment.filename}"
 
-@app.route("/", methods=["GET", "POST"])
-def index():
-    if request.method == "POST":
-        cloth = request.files["cloth_image"]
-        pose = request.files["pose_image"]
-        high_res = bool(request.form.get("high_resolution"))
+    with open(person_path, "wb") as f:
+        shutil.copyfileobj(person.file, f)
+    with open(garment_path, "wb") as f:
+        shutil.copyfileobj(garment.file, f)
 
-        cloth_path = os.path.join(app.config['UPLOAD_FOLDER'], cloth.filename)
-        pose_path = os.path.join(app.config['UPLOAD_FOLDER'], pose.filename)
-        cloth.save(cloth_path)
-        pose.save(pose_path)
+    # Call HuggingFace API
+    result_path = client.predict(
+        person=file(person_path),
+        garment=file(garment_path),
+        denoise_steps=30,
+        seed=42,
+        api_name="/infer"
+    )
 
-        result = client.predict(
-            cloth_image=handle_file(cloth_path),
-            pose_image=handle_file(pose_path),
-            high_resolution=high_res,
-            api_name="/onClick"
-        )
+    return FileResponse(result_path, media_type="image/jpeg")
 
-        result_img, runtime_info, value_21 = result
-        return render_template("index.html", result_img=result_img,
-                               runtime_info=runtime_info, value_21=value_21)
-
-    return render_template("index.html")
-
-if __name__ == "__main__":
-    app.run(debug=True)
