@@ -1,32 +1,44 @@
-from fastapi import FastAPI, File, UploadFile
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from gradio_client import Client, file
+import shutil
 import os
 
 app = FastAPI()
 
-# Enable CORS so HTML from any origin can make requests
+# CORS support
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # You can replace "*" with your frontend URL for more security
-    allow_credentials=True,
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# POST endpoint for /tryon
+@app.get("/")
+def read_root():
+    return {"message": "TryOn server is running."}
+
 @app.post("/tryon/")
 async def tryon(person: UploadFile = File(...), garment: UploadFile = File(...)):
-    # For now, just return a static test image
-    dummy_output_path = "static/sample_result.jpg"
-    
-    # Make sure the file exists
-    if not os.path.exists(dummy_output_path):
-        return {"error": "sample_result.jpg not found in static/"}
+    # Save uploaded files temporarily
+    with open("person.jpg", "wb") as buffer:
+        shutil.copyfileobj(person.file, buffer)
+    with open("garment.jpg", "wb") as buffer:
+        shutil.copyfileobj(garment.file, buffer)
 
-    return FileResponse(dummy_output_path, media_type="image/jpeg")
+    # Call Hugging Face API
+    client = Client("frogleo/AI-Clothes-Changer")
+    result = client.predict(
+        person=file("person.jpg"),
+        garment=file("garment.jpg"),
+        denoise_steps=30,
+        seed=42,
+        api_name="/infer"
+    )
 
-# Optional: health check
-@app.get("/")
-async def root():
-    return {"message": "TryOn server is running."}
+    # Save result
+    result_path = "static/output.jpg"
+    os.makedirs("static", exist_ok=True)
+    shutil.copy(result, result_path)
+
+    return {"image_url": f"/static/output.jpg"}
