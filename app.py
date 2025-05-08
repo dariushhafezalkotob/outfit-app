@@ -1,39 +1,32 @@
-from fastapi import FastAPI, File, UploadFile, Response
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
-import shutil
+from fastapi.middleware.cors import CORSMiddleware
 import os
 
 app = FastAPI()
 
-# ✅ CORS setup — allows your HTML page to talk to the API
+# Enable CORS so HTML from any origin can make requests
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Replace with your domain in production
+    allow_origins=["*"],  # You can replace "*" with your frontend URL for more security
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ✅ Serve static files like index.html
-app.mount("/", StaticFiles(directory="static", html=True), name="static")
-
-# ✅ /tryon/ route to handle form POST
+# POST endpoint for /tryon
 @app.post("/tryon/")
-async def try_on(person: UploadFile = File(...), garment: UploadFile = File(...)):
-    # Save uploaded images (optional for testing or processing)
-    os.makedirs("uploads", exist_ok=True)
-    person_path = f"uploads/person_{person.filename}"
-    garment_path = f"uploads/garment_{garment.filename}"
+async def tryon(person: UploadFile = File(...), garment: UploadFile = File(...)):
+    # For now, just return a static test image
+    dummy_output_path = "static/sample_result.jpg"
+    
+    # Make sure the file exists
+    if not os.path.exists(dummy_output_path):
+        return {"error": "sample_result.jpg not found in static/"}
 
-    with open(person_path, "wb") as buffer:
-        shutil.copyfileobj(person.file, buffer)
-    with open(garment_path, "wb") as buffer:
-        shutil.copyfileobj(garment.file, buffer)
+    return FileResponse(dummy_output_path, media_type="image/jpeg")
 
-    # 🧠 Replace this with your actual TryOn model logic
-    # For now, just return a placeholder image (must exist)
-    result_path = "static/sample_result.jpg"  # Put a test image in static/
-
-    return FileResponse(result_path, media_type="image/jpeg")
+# Optional: health check
+@app.get("/")
+async def root():
+    return {"message": "TryOn server is running."}
