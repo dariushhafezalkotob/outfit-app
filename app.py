@@ -1,44 +1,47 @@
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, File, UploadFile, Form
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from gradio_client import Client, file
+from fastapi.staticfiles import StaticFiles
 import shutil
+import uuid
 import os
 
 app = FastAPI()
 
-# CORS support
+# Allow frontend requests
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # You can restrict this
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Static directory
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
 @app.get("/")
-def read_root():
+def home():
     return {"message": "TryOn server is running."}
 
 @app.post("/tryon/")
 async def tryon(person: UploadFile = File(...), garment: UploadFile = File(...)):
     # Save uploaded files temporarily
-    with open("person.jpg", "wb") as buffer:
+    person_path = f"temp/{uuid.uuid4()}_{person.filename}"
+    garment_path = f"temp/{uuid.uuid4()}_{garment.filename}"
+
+    with open(person_path, "wb") as buffer:
         shutil.copyfileobj(person.file, buffer)
-    with open("garment.jpg", "wb") as buffer:
+    with open(garment_path, "wb") as buffer:
         shutil.copyfileobj(garment.file, buffer)
 
-    # Call Hugging Face API
-    client = Client("frogleo/AI-Clothes-Changer")
-    result = client.predict(
-        person=file("person.jpg"),
-        garment=file("garment.jpg"),
-        denoise_steps=30,
-        seed=42,
-        api_name="/infer"
-    )
+    # === Replace this with real model inference ===
+    # For now, copy a placeholder result image
+    result_filename = f"{uuid.uuid4()}_result.jpg"
+    result_path = f"static/{result_filename}"
+    shutil.copy("sample_result.jpg", result_path)  # Replace with your real output
 
-    # Save result
-    result_path = "static/output.jpg"
-    os.makedirs("static", exist_ok=True)
-    shutil.copy(result, result_path)
+    # Clean up if needed (optional)
+    os.remove(person_path)
+    os.remove(garment_path)
 
-    return {"image_url": f"/static/output.jpg"}
+    return JSONResponse(content={"image_url": f"/static/{result_filename}"})
